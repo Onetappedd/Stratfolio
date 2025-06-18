@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio Generator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .wrapper {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+            width: 80%; /* Adjusted for better scaling */
+        }
+        .container {
+            padding: 20px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            flex: 0 0 55%;
+            font-size: 1rem; /* Adjusted font size */
+        }
+        .chart-container {
+            display: none; /* Hide chart until portfolio is generated */
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            justify-content: center;
+            align-items: center;
+            flex: 0 0 35%;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        label {
+            font-weight: bold;
+            margin-top: 10px;
+            display: block;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1rem; /* Adjusted font size */
+        }
+        button {
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e9f7ef;
+            border: 1px solid #d4edda;
+            border-radius: 5px;
+        }
+        .error {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            color: #721c24;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f9;
+        }
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background: #eef;
+            border: 1px solid #ccd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <div class="container">
+            <h1>Portfolio Generator</h1>
+            <form id="portfolioForm">
+                <label for="riskLevel">Select Risk Level:</label>
+                <select id="riskLevel" name="riskLevel" required>
+                    <option value="" disabled selected>Select a risk level</option>
+                    <option value="Conservative">Conservative</option>
+                    <option value="Moderately Conservative">Moderately Conservative</option>
+                    <option value="Moderate">Moderate</option>
+                    <option value="Moderately Aggressive">Moderately Aggressive</option>
+                    <option value="Aggressive">Aggressive</option>
+                </select>
+
+                <label for="investmentAmount">Investment Amount ($):</label>
+                <input type="number" id="investmentAmount" name="investmentAmount" placeholder="Enter amount" min="1" required>
+
+                <label for="useApi">
+                    <input type="checkbox" id="useApi" name="useApi" checked>
+                    Use Marketstack API for Data
+                </label>
+
+                <button type="submit">Generate Portfolio</button>
+            </form>
+
+            <div id="responseContainer" class="response" style="display: none;"></div>
+            <div id="errorContainer" class="error" style="display: none;"></div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="allocationChart" width="250" height="250"></canvas>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('portfolioForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            // Get user inputs
+            const riskLevel = document.getElementById('riskLevel').value;
+            const investmentAmount = parseFloat(document.getElementById('investmentAmount').value);
+            const useApi = document.getElementById('useApi').checked;
+
+            // Hide previous responses
+            const responseContainer = document.getElementById('responseContainer');
+            const errorContainer = document.getElementById('errorContainer');
+            const chartContainer = document.querySelector('.chart-container');
+            responseContainer.style.display = 'none';
+            errorContainer.style.display = 'none';
+            chartContainer.style.display = 'none';
+
+            try {
+                // Make API call
+                const response = await fetch('http://127.0.0.1:8000/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        risk_level: riskLevel,
+                        amount: investmentAmount,
+                        use_api: useApi
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Error: ${response.status} - ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                // Display response
+                const stocks = data.stocks || [];
+                const bonds = data.bonds || [];
+                const cash = data.cash || 0;
+
+                let totalAllocation = stocks.reduce((sum, stock) => sum + stock.allocation, 0)
+                    + bonds.reduce((sum, bond) => sum + bond.allocation, 0)
+                    + cash;
+
+                responseContainer.innerHTML = `
+                    <h3>Portfolio Allocation</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Asset Class</th>
+                                <th>Ticker</th>
+                                <th>Allocation</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${stocks.map(stock => `
+                                <tr>
+                                    <td>Stocks</td>
+                                    <td>${stock.symbol}</td>
+                                    <td>$${stock.allocation.toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                            ${bonds.map(bond => `
+                                <tr>
+                                    <td>Bonds</td>
+                                    <td>${bond.symbol}</td>
+                                    <td>$${bond.allocation.toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                            <tr>
+                                <td>Cash</td>
+                                <td>-</td>
+                                <td>$${cash.toFixed(2)}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="summary">
+                        <p><strong>Total Investment:</strong> $${totalAllocation.toFixed(2)}</p>
+                        <p><strong>Expected Returns:</strong> ~8% annually (varies by risk level)</p>
+                    </div>
+                `;
+                responseContainer.style.display = 'block';
+
+                // Generate Pie Chart
+                const labels = [...stocks.map(stock => stock.symbol), ...bonds.map(bond => bond.symbol), "Cash"];
+                const values = [...stocks.map(stock => stock.allocation), ...bonds.map(bond => bond.allocation), cash];
+                const ctx = document.getElementById('allocationChart').getContext('2d');
+
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: values,
+                            backgroundColor: ['#007BFF', '#28A745', '#FFC107', '#FF5733', '#8E44AD']
+                        }]
+                    }
+                });
+
+                chartContainer.style.display = 'flex';
+            } catch (error) {
+                // Display error
+                errorContainer.textContent = error.message;
+                errorContainer.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
